@@ -50,14 +50,10 @@ def cppstd_flag_new(settings):
 
 
 def cppstd_default(settings):
-    if getattr(settings, "get_safe", None):
-        compiler = settings.get_safe("compiler")
-        compiler_version = settings.get_safe("compiler.version")
-        compiler_base = settings.get_safe("compiler.base")
-    else:
-        compiler = str(settings.compiler)
-        compiler_version = str(settings.compiler.version)
-        compiler_base = str(settings.compiler.base)
+
+    compiler = settings.get_safe("compiler")
+    compiler_version = settings.get_safe("compiler.version")
+    compiler_base = settings.get_safe("compiler.base")
     intel_cppstd_default = _intel_visual_cppstd_default if compiler_base == "Visual Studio" \
         else _intel_gcc_cppstd_default
     default = {"gcc": _gcc_cppstd_default(compiler_version),
@@ -70,6 +66,8 @@ def cppstd_default(settings):
 
 
 def _clang_cppstd_default(compiler_version):
+    if Version(compiler_version) >= "16":
+        return "gnu17"
     # Official docs are wrong, in 6.0 the default is gnu14 to follow gcc's choice
     return "gnu98" if Version(compiler_version) < "6" else "gnu14"
 

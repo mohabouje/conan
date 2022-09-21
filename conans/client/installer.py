@@ -104,6 +104,7 @@ class _PackageBuilder(object):
         retrieve_exports_sources(self._remote_manager, self._cache, conanfile, pref.ref, remotes)
 
         conanfile.folders.set_base_source(source_folder)
+        conanfile.folders.set_base_export_sources(source_folder)
         conanfile.folders.set_base_build(None)
         conanfile.folders.set_base_package(None)
 
@@ -217,10 +218,10 @@ class _PackageBuilder(object):
                 conanfile.folders.set_base_build(base_build)
                 conanfile.folders.set_base_imports(base_build)
                 conanfile.folders.set_base_package(base_package)
+                # In local cache, generators folder always in build_folder
+                conanfile.folders.set_base_generators(base_build)
 
                 if not skip_build:
-                    # In local cache, generators folder always in build_folder
-                    conanfile.folders.set_base_generators(base_build)
                     # In local cache, install folder always is build_folder
                     conanfile.folders.set_base_install(base_build)
                     self._build(conanfile, pref)
@@ -422,7 +423,13 @@ class BinaryInstaller(object):
         if invalid:
             msg = ["There are invalid packages (packages that cannot exist for this configuration):"]
             for node in invalid:
-                msg.append("{}: Invalid ID: {}".format(node.conanfile, node.conanfile.info.invalid))
+                if node.cant_build:
+                    msg.append("{}: Cannot build "
+                               "for this configuration: {}".format(node.conanfile,
+                                                                   node.cant_build))
+                else:
+                    msg.append("{}: Invalid ID: {}".format(node.conanfile,
+                                                           node.conanfile.info.invalid))
             raise ConanInvalidConfiguration("\n".join(msg))
         self._raise_missing(missing)
         processed_package_refs = {}
@@ -467,12 +474,7 @@ class BinaryInstaller(object):
         base_path = package_layout.base_folder()
 
         if hasattr(conanfile, "layout"):
-            conanfile.folders.set_base_package(package_layout.output_folder or base_path)
-            conanfile.folders.set_base_source(package_layout.source_folder or base_path)
-            conanfile.folders.set_base_build(package_layout.output_folder or base_path)
-            conanfile.folders.set_base_generators(package_layout.output_folder or base_path)
-            conanfile.folders.set_base_install(base_path)
-            conanfile.folders.set_base_imports(package_layout.output_folder or base_path)
+            conanfile.folders.set_base_folders(base_path, package_layout.output_folder)
         else:
             conanfile.folders.set_base_package(base_path)
             conanfile.folders.set_base_source(None)
@@ -675,10 +677,15 @@ class BinaryInstaller(object):
                     self._hook_manager.execute("pre_package_info", conanfile=conanfile,
                                                reference=ref)
                     if hasattr(conanfile, "layout"):
-                        conanfile.cpp.package.set_relative_base_folder(conanfile.package_folder)
                         # Old cpp info without defaults (the defaults are in the new one)
                         conanfile.cpp_info = CppInfo(conanfile.name, package_folder,
                                                      default_values=CppInfoDefaultValues())
+                        # Note: Remember that this is not needed for Conan 2.x
+                        # Let's avoid losing this information.
+                        conanfile.cpp_info.version = conanfile.version
+                        conanfile.cpp_info.description = conanfile.description
+                        conanfile.cpp_info.public_deps = public_deps
+
                         if not is_editable:
                             # Copy the infos.package into the old cppinfo
                             fill_old_cppinfo(conanfile.cpp.package, conanfile.cpp_info)

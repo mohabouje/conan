@@ -1,3 +1,4 @@
+import platform
 from os import chdir
 
 import pytest
@@ -258,7 +259,7 @@ def test_build_type_flag(compiler):
 
 def test_apple_arch_flag():
     conanfile = ConanFileMock()
-    conanfile.conf = {"tools.apple:sdk_path": "/path/to/sdk"}
+    conanfile.conf.define("tools.apple:sdk_path", "/path/to/sdk")
     conanfile.settings_build = MockSettings(
         {"build_type": "Debug",
          "os": "Macos",
@@ -290,7 +291,7 @@ def test_apple_arch_flag():
 def test_apple_min_os_flag():
     """Even when no cross building it is adjusted because it could target a Mac version"""
     conanfile = ConanFileMock()
-    conanfile.conf = {"tools.apple:sdk_path": "/path/to/sdk"}
+    conanfile.conf.define("tools.apple:sdk_path", "/path/to/sdk")
     conanfile.settings = MockSettings(
         {"build_type": "Debug",
          "os": "Macos",
@@ -308,7 +309,7 @@ def test_apple_min_os_flag():
 def test_apple_isysrootflag():
     """Even when no cross building it is adjusted because it could target a Mac version"""
     conanfile = ConanFileMock()
-    conanfile.conf = {"tools.apple:sdk_path": "/path/to/sdk"}
+    conanfile.conf.define("tools.apple:sdk_path", "/path/to/sdk")
     conanfile.settings_build = MockSettings(
         {"build_type": "Debug",
          "os": "Macos",
@@ -337,16 +338,38 @@ def test_apple_isysrootflag():
     assert be.apple_isysroot_flag is None
 
 
+def test_sysrootflag():
+    """Even when no cross building it is adjusted because it could target a Mac version"""
+    conanfile = ConanFileMock()
+    conanfile.conf.define("tools.build:sysroot", "/path/to/sysroot")
+    conanfile.settings = MockSettings(
+        {"build_type": "Debug",
+         "os": {"Darwin": "Macos"}.get(platform.system(), platform.system()),
+         "arch": "x86_64"})
+    be = AutotoolsToolchain(conanfile)
+    expected = "--sysroot /path/to/sysroot"
+    assert be.sysroot_flag == expected
+    env = be.vars()
+    assert expected in env["CXXFLAGS"]
+    assert expected in env["CFLAGS"]
+    assert expected in env["LDFLAGS"]
+
+
 def test_custom_defines():
     conanfile = ConanFileMock()
-    conanfile.conf = {"tools.apple:sdk_path": "/path/to/sdk"}
+    conanfile.conf.define("tools.apple:sdk_path", "/path/to/sdk")
     conanfile.settings = MockSettings(
         {"build_type": "RelWithDebInfo",
          "os": "iOS",
          "os.version": "14",
          "arch": "armv8"})
     be = AutotoolsToolchain(conanfile)
-    be.defines = ["MyDefine1", "MyDefine2"]
+    be.extra_defines = ["MyDefine1", "MyDefine2"]
+
+    assert "MyDefine1" in be.defines
+    assert "MyDefine2" in be.defines
+    assert "NDEBUG" in be.defines
+
     env = be.vars()
     assert "-DMyDefine1" in env["CPPFLAGS"]
     assert "-DMyDefine2" in env["CPPFLAGS"]
@@ -355,14 +378,21 @@ def test_custom_defines():
 
 def test_custom_cxxflags():
     conanfile = ConanFileMock()
-    conanfile.conf = {"tools.apple:sdk_path": "/path/to/sdk"}
+    conanfile.conf.define("tools.apple:sdk_path", "/path/to/sdk")
     conanfile.settings = MockSettings(
         {"build_type": "RelWithDebInfo",
          "os": "iOS",
          "os.version": "14",
          "arch": "armv8"})
     be = AutotoolsToolchain(conanfile)
-    be.cxxflags = ["MyFlag1", "MyFlag2"]
+    be.extra_cxxflags = ["MyFlag1", "MyFlag2"]
+
+    assert "MyFlag1" in be.cxxflags
+    assert "MyFlag2" in be.cxxflags
+    assert "-mios-version-min=14" in be.cxxflags
+    assert "MyFlag" not in be.cflags
+    assert "MyFlag" not in be.ldflags
+
     env = be.vars()
     assert "MyFlag1" in env["CXXFLAGS"]
     assert "MyFlag2" in env["CXXFLAGS"]
@@ -374,14 +404,21 @@ def test_custom_cxxflags():
 
 def test_custom_cflags():
     conanfile = ConanFileMock()
-    conanfile.conf = {"tools.apple:sdk_path": "/path/to/sdk"}
+    conanfile.conf.define("tools.apple:sdk_path", "/path/to/sdk")
     conanfile.settings = MockSettings(
         {"build_type": "RelWithDebInfo",
          "os": "iOS",
          "os.version": "14",
          "arch": "armv8"})
     be = AutotoolsToolchain(conanfile)
-    be.cflags = ["MyFlag1", "MyFlag2"]
+    be.extra_cflags = ["MyFlag1", "MyFlag2"]
+
+    assert "MyFlag1" in be.cflags
+    assert "MyFlag2" in be.cflags
+    assert "-mios-version-min=14" in be.cflags
+    assert "MyFlag" not in be.cxxflags
+    assert "MyFlag" not in be.ldflags
+
     env = be.vars()
     assert "MyFlag1" in env["CFLAGS"]
     assert "MyFlag2" in env["CFLAGS"]
@@ -393,14 +430,21 @@ def test_custom_cflags():
 
 def test_custom_ldflags():
     conanfile = ConanFileMock()
-    conanfile.conf = {"tools.apple:sdk_path": "/path/to/sdk"}
+    conanfile.conf.define("tools.apple:sdk_path", "/path/to/sdk")
     conanfile.settings = MockSettings(
         {"build_type": "RelWithDebInfo",
          "os": "iOS",
          "os.version": "14",
          "arch": "armv8"})
     be = AutotoolsToolchain(conanfile)
-    be.ldflags = ["MyFlag1", "MyFlag2"]
+    be.extra_ldflags = ["MyFlag1", "MyFlag2"]
+
+    assert "MyFlag1" in be.ldflags
+    assert "MyFlag2" in be.ldflags
+    assert "-mios-version-min=14" in be.ldflags
+    assert "MyFlag" not in be.cxxflags
+    assert "MyFlag" not in be.cflags
+
     env = be.vars()
     assert "MyFlag1" in env["LDFLAGS"]
     assert "MyFlag2" in env["LDFLAGS"]
@@ -408,3 +452,23 @@ def test_custom_ldflags():
 
     assert "MyFlag" not in env["CXXFLAGS"]
     assert "MyFlag" not in env["CFLAGS"]
+
+
+def test_extra_flags_via_conf():
+    conanfile = ConanFileMock()
+    conanfile.conf.define("tools.build:cxxflags", ["--flag1", "--flag2"])
+    conanfile.conf.define("tools.build:cflags", ["--flag3", "--flag4"])
+    conanfile.conf.define("tools.build:sharedlinkflags", ["--flag5"])
+    conanfile.conf.define("tools.build:exelinkflags", ["--flag6"])
+    conanfile.conf.define("tools.build:defines", ["DEF1", "DEF2"])
+    conanfile.settings = MockSettings(
+        {"build_type": "RelWithDebInfo",
+         "os": "iOS",
+         "os.version": "14",
+         "arch": "armv8"})
+    be = AutotoolsToolchain(conanfile)
+    env = be.vars()
+    assert '-DNDEBUG -DDEF1 -DDEF2' in env["CPPFLAGS"]
+    assert '-mios-version-min=14 --flag1 --flag2' in env["CXXFLAGS"]
+    assert '-mios-version-min=14 --flag3 --flag4' in env["CFLAGS"]
+    assert '-mios-version-min=14 --flag5 --flag6' in env["LDFLAGS"]
